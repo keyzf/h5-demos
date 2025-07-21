@@ -2,64 +2,163 @@
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>摇一摇示例</title>
-  <style>
-    body {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      height: 100vh;
-      margin: 0;
-      background-color: #f0f0f0;
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>摇一摇计数器</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet">
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            primary: '#3B82F6',
+            secondary: '#10B981',
+            accent: '#F59E0B',
+          },
+          fontFamily: {
+            sans: ['Inter', 'system-ui', 'sans-serif'],
+          },
+        },
+      }
     }
-    button {
-      padding: 12px 24px;
-      font-size: 16px;
-      background-color: #4CAF50;
-      color: white;
-      border: none;
-      border-radius: 4px;
-      cursor: pointer;
-    }
-    #result {
-      margin-top: 20px;
-      font-size: 24px;
-      font-weight: bold;
+  </script>
+  <style type="text/tailwindcss">
+    @layer utilities {
+      .content-auto {
+        content-visibility: auto;
+      }
+      .text-shadow {
+        text-shadow: 0 2px 4px rgba(0,0,0,0.1);
+      }
+      .card-shadow {
+        box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+      }
+      .shake-animation {
+        animation: shake 0.5s;
+        animation-iteration-count: 1;
+      }
+      @keyframes shake {
+        0% { transform: translate(1px, 1px) rotate(0deg); }
+        10% { transform: translate(-1px, -2px) rotate(-1deg); }
+        20% { transform: translate(-3px, 0px) rotate(1deg); }
+        30% { transform: translate(3px, 2px) rotate(0deg); }
+        40% { transform: translate(1px, -1px) rotate(1deg); }
+        50% { transform: translate(-1px, 2px) rotate(-1deg); }
+        60% { transform: translate(-3px, 1px) rotate(0deg); }
+        70% { transform: translate(3px, 1px) rotate(-1deg); }
+        80% { transform: translate(-1px, -1px) rotate(1deg); }
+        90% { transform: translate(1px, 2px) rotate(0deg); }
+        100% { transform: translate(1px, -2px) rotate(-1deg); }
+      }
     }
   </style>
 </head>
-<body>
-  <button id="permissionBtn">开启摇一摇</button>
-  <div id="result">请摇动手机</div>
+<body class="bg-gradient-to-br from-blue-50 to-indigo-100 min-h-screen flex flex-col items-center justify-center p-4">
+  <div class="max-w-md w-full bg-white rounded-2xl p-8 card-shadow relative overflow-hidden">
+    <!-- 装饰元素 -->
+    <div class="absolute -top-16 -right-16 w-32 h-32 bg-primary/10 rounded-full"></div>
+    <div class="absolute -bottom-10 -left-10 w-24 h-24 bg-secondary/10 rounded-full"></div>
+    
+    <div class="relative z-10">
+      <header class="text-center mb-8">
+        <h1 class="text-[clamp(2rem,5vw,2.5rem)] font-bold text-gray-800 mb-2 text-shadow">
+          摇一摇计数器
+        </h1>
+        <p class="text-gray-500">拿起手机摇一摇，看看你能摇多少次！</p>
+      </header>
+      
+      <div class="flex flex-col items-center justify-center mb-10">
+        <div id="count-display" class="w-64 h-64 rounded-full bg-gradient-to-br from-primary to-indigo-600 flex items-center justify-center mb-6 shadow-lg">
+          <span id="count" class="text-[clamp(4rem,12vw,6rem)] font-bold text-white">0</span>
+        </div>
+        
+        <div class="text-center">
+          <p class="text-gray-600 mb-2">当前计数</p>
+          <button id="reset-btn" class="bg-gray-200 hover:bg-gray-300 text-gray-700 px-6 py-3 rounded-full transition-all duration-300 flex items-center">
+            <i class="fa fa-refresh mr-2"></i> 重置计数
+          </button>
+        </div>
+      </div>
+      
+      <div class="bg-gray-50 rounded-xl p-4 mb-6">
+        <div class="flex items-center text-gray-700">
+          <i class="fa fa-info-circle text-primary mr-3"></i>
+          <p>请确保已授予设备运动权限，否则无法检测到摇动</p>
+        </div>
+      </div>
+      
+      <div id="status" class="text-center text-gray-500 mb-4">
+        等待摇动...
+      </div>
+      
+      <footer class="text-center text-gray-400 text-sm">
+        <p>© 2025 摇一摇技术</p>
+      </footer>
+    </div>
+  </div>
 
   <script>
-    const resultElement = document.getElementById('result');
-    const permissionBtn = document.getElementById('permissionBtn');
-    
+    // 存储计数和状态
+    let shakeCount = 0;
     let lastX, lastY, lastZ;
-    let shakeThreshold = 15;
     let lastTime = 0;
-    let shakeDelay = 500;
+    const shakeThreshold = 15; // 摇动阈值
+    const shakeDelay = 500; // 防抖时间
+    let permissionGranted = false;
+    let hasShaken = false;
     
+    // DOM 元素
+    const countElement = document.getElementById('count');
+    const statusElement = document.getElementById('status');
+    const resetButton = document.getElementById('reset-btn');
+    const countDisplay = document.getElementById('count-display');
+    
+    // 更新计数显示
+    function updateCount() {
+      countElement.textContent = shakeCount;
+      // 添加动画效果
+      countDisplay.classList.add('shake-animation');
+      setTimeout(() => {
+        countDisplay.classList.remove('shake-animation');
+      }, 500);
+    }
+    
+    // 重置计数
+    function resetCount() {
+      shakeCount = 0;
+      updateCount();
+      statusElement.textContent = '等待摇动...';
+      statusElement.className = 'text-center text-gray-500 mb-4';
+    }
+    
+    // 处理设备摇动
     function handleMotion(event) {
+      if (!permissionGranted) return;
+      
       const { x, y, z } = event.accelerationIncludingGravity;
       const currentTime = Date.now();
       
+      // 防抖处理
       if (currentTime - lastTime < shakeDelay) return;
       
       if (lastX !== undefined) {
         const deltaX = Math.abs(lastX - x);
         const deltaY = Math.abs(lastY - y);
         const deltaZ = Math.abs(lastZ - z);
+        
+        // 计算综合加速度变化
         const delta = Math.sqrt(deltaX * deltaX + deltaY * deltaY + deltaZ * deltaZ);
         
         if (delta > shakeThreshold) {
-          resultElement.textContent = '检测到摇一摇！';
-          setTimeout(() => {
-            resultElement.textContent = '请摇动手机';
-          }, 2000);
+          // 检测到摇动
+          shakeCount++;
+          updateCount();
+          
+          if (!hasShaken) {
+            hasShaken = true;
+            statusElement.textContent = '继续摇动！';
+            statusElement.className = 'text-center text-secondary font-medium mb-4';
+          }
         }
       }
       
@@ -69,32 +168,63 @@
       lastTime = currentTime;
     }
     
-    function initShakeDetection() {
-      if (window.DeviceMotionEvent) {
+    // 请求权限并开始监听
+    async function initShakeDetection() {
+      try {
+        // 尝试获取权限
         if (typeof DeviceMotionEvent.requestPermission === 'function') {
-          permissionBtn.addEventListener('click', async () => {
+          // 对于需要用户手势的浏览器，模拟点击
+          const clickEvent = new MouseEvent('click', {
+            'view': window,
+            'bubbles': true,
+            'cancelable': true
+          });
+          document.dispatchEvent(clickEvent);
+          
+          // 延迟执行以确保浏览器认为有用户交互
+          setTimeout(async () => {
             const permissionState = await DeviceMotionEvent.requestPermission();
             if (permissionState === 'granted') {
               window.addEventListener('devicemotion', handleMotion);
-              resultElement.textContent = '已授权，请摇动手机';
-              permissionBtn.style.display = 'none';
+              permissionGranted = true;
+              statusElement.textContent = '已准备好，请摇动手机';
+              statusElement.className = 'text-center text-primary font-medium mb-4';
             } else {
-              resultElement.textContent = '权限被拒绝';
+              statusElement.textContent = '权限被拒绝，无法检测摇动';
+              statusElement.className = 'text-center text-red-500 mb-4';
             }
-          });
+          }, 100);
         } else {
+          // 不需要权限的浏览器直接监听
           window.addEventListener('devicemotion', handleMotion);
-          resultElement.textContent = '已启用，请摇动手机';
-          permissionBtn.style.display = 'none';
+          permissionGranted = true;
+          statusElement.textContent = '已准备好，请摇动手机';
+          statusElement.className = 'text-center text-primary font-medium mb-4';
         }
-      } else {
-        resultElement.textContent = '设备不支持重力感应';
-        permissionBtn.disabled = true;
+      } catch (error) {
+        console.error('初始化失败:', error);
+        statusElement.textContent = '初始化失败，请刷新页面重试';
+        statusElement.className = 'text-center text-red-500 mb-4';
       }
     }
     
+    // 绑定重置按钮事件
+    resetButton.addEventListener('click', resetCount);
+    
     // 页面加载完成后初始化
     window.addEventListener('DOMContentLoaded', initShakeDetection);
+    
+    // 添加设备方向变化监听，提供更好的用户体验
+    window.addEventListener('deviceorientation', (event) => {
+      if (!permissionGranted) return;
+      
+      // 简单的方向提示
+      if (Math.abs(event.gamma) > 30 || Math.abs(event.beta) > 30) {
+        statusElement.textContent = '保持手机竖直握持效果更佳';
+        statusElement.className = 'text-center text-gray-700 mb-4';
+      }
+    });
   </script>
 </body>
 </html>
+    
